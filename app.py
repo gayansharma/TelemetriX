@@ -4,10 +4,6 @@ import streamlit as st
 import plotly.express as px
 import plotly.graph_objects as go
 from sklearn.ensemble import IsolationForest
-from poliastro.bodies import Earth
-from poliastro.twobody import Orbit
-from astropy import units as u
-from astropy.time import Time, TimeDelta
 
 # --------------------- Generate Telemetry Data --------------------- #
 time = np.arange(0, 500, 1)
@@ -34,17 +30,15 @@ features = telemetry[["temperature","voltage","current","signal_strength"]]
 model = IsolationForest(contamination=0.05, random_state=42)
 telemetry["anomaly"] = model.fit_predict(features)   # -1 = anomaly
 
-# --------------------- Orbit & Space Traffic --------------------- #
-epoch = Time("2025-01-01 00:00:00", scale="utc")
-sat1 = Orbit.circular(Earth, alt=500 * u.km, epoch=epoch)
-sat2 = Orbit.circular(Earth, alt=505 * u.km, epoch=epoch)
+# --------------------- Precomputed Orbit Coordinates --------------------- #
+# 100 points along circular orbits
+theta = np.linspace(0, 2*np.pi, 100)
 
-# Sample times along orbit (100 points)
-times = TimeDelta(np.linspace(0, sat1.period.to(u.s).value, 100) * u.s)
+# Satellite 1 (radius ~7000 km)
+sat1_coords = np.array([[7000*np.cos(t), 7000*np.sin(t), 0] for t in theta])
 
-# Satellite positions along orbit
-sat1_coords = np.array([sat1.propagate(t).r.to(u.km).value for t in times])
-sat2_coords = np.array([sat2.propagate(t).r.to(u.km).value for t in times])
+# Satellite 2 (radius ~7005 km)
+sat2_coords = np.array([[7005*np.cos(t), 7005*np.sin(t), 0] for t in theta])
 
 # Calculate minimum distance along orbit for collision risk
 distances = np.linalg.norm(sat1_coords - sat2_coords, axis=1)
@@ -78,7 +72,7 @@ st.subheader("🌐 Space Traffic Management (STM)")
 st.write(f"Minimum Satellite distance along orbit: **{min_distance:.2f} km**")
 st.write(f"Risk Status: **{risk_status}**")
 
-# --------------------- Interactive 3D Orbit Plot --------------------- #
+# --------------------- 3D Orbit Visualization --------------------- #
 fig2 = go.Figure()
 
 # Earth
@@ -88,7 +82,7 @@ y = 6371 * np.sin(u_sphere) * np.sin(v_sphere)
 z = 6371 * np.cos(v_sphere)
 fig2.add_trace(go.Surface(x=x, y=y, z=z, colorscale='Blues', opacity=0.6, name='Earth'))
 
-# Satellite 1 orbit line + current position
+# Satellite 1 orbit
 fig2.add_trace(go.Scatter3d(
     x=sat1_coords[:,0],
     y=sat1_coords[:,1],
@@ -99,7 +93,7 @@ fig2.add_trace(go.Scatter3d(
     marker=dict(size=3)
 ))
 
-# Satellite 2 orbit line + current position
+# Satellite 2 orbit
 fig2.add_trace(go.Scatter3d(
     x=sat2_coords[:,0],
     y=sat2_coords[:,1],
